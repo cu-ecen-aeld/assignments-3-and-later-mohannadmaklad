@@ -1,4 +1,18 @@
 #include "systemcalls.h"
+#include "stdlib.h"
+#include <unistd.h>
+#include <sys/wait.h>
+#include <fcntl.h>
+#include <syslog.h>
+
+
+
+void log_commands(int count, char* cmds[]){
+	for(int i=0; i<count; i++){
+		syslog(LOG_DEBUG, "Command %d is %s", i, cmds[i]);
+	}
+}
+
 
 /**
  * @param cmd the command to execute with system()
@@ -16,8 +30,7 @@ bool do_system(const char *cmd)
  *   and return a boolean true if the system() call completed with success
  *   or false() if it returned a failure
 */
-
-    return true;
+    return system(cmd) == 0;
 }
 
 /**
@@ -58,10 +71,33 @@ bool do_exec(int count, ...)
  *   as second argument to the execv() command.
  *
 */
+    
+    openlog("SystemCalls", LOG_PID, LOG_USER);
+    syslog(LOG_DEBUG, "Starting system log");
+    pid_t pid;
+    switch(pid=fork()){
+	 case -1:
+		 syslog(LOG_INFO,"Child process couldn't be created!"); 
+		 exit(1);
+	 case 0: {
+	     syslog(LOG_INFO,"Child process is created! Executing the command in path %s", command[0]);
+             log_commands(count, command);
+	     if(execv(command[0], command) == -1) {
+	       syslog(LOG_INFO, "Couldn't execute the command with path: %s", command[0]);
+	       exit(1);
+	     }
+	}
+    }
+    int wstatus=0;
 
+
+    if(wait(&wstatus) == -1) return 0;;
+    
+    syslog(LOG_DEBUG, "WIFEXITED: %d, and WEXITSTATUS: %d",WIFEXITED(wstatus), WEXITSTATUS(wstatus));
+    syslog(LOG_DEBUG, "Return value %d",(WIFEXITED(wstatus) && WEXITSTATUS(wstatus) == EXIT_SUCCESS));
+    closelog();
     va_end(args);
-
-    return true;
+    return (WIFEXITED(wstatus) && WEXITSTATUS(wstatus) == EXIT_SUCCESS);
 }
 
 /**
@@ -92,8 +128,33 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
  *   The rest of the behaviour is same as do_exec()
  *
 */
+    int fd = open(outputfile, O_WRONLY|O_TRUNC|O_CREAT, 0644);
+     openlog("SystemCalls", LOG_PID, LOG_USER);
+    syslog(LOG_DEBUG, "Starting system log");
+    pid_t pid;
+    switch(pid=fork()){
+	 case -1:
+		 syslog(LOG_INFO,"Child process couldn't be created!"); 
+		 exit(1);
+	 case 0: {
+	     syslog(LOG_INFO,"Child process is created! Executing the command in path %s", command[0]);
+             log_commands(count, command);
 
+	     dup2(fd,1);
+	     if(execv(command[0], command) == -1) {
+	       syslog(LOG_INFO, "Couldn't execute the command with path: %s", command[0]);
+	       exit(1);
+	     }
+	}
+    }
+    int wstatus=0;
+
+
+    if(wait(&wstatus) == -1) return 0;;
+    
+    syslog(LOG_DEBUG, "WIFEXITED: %d, and WEXITSTATUS: %d",WIFEXITED(wstatus), WEXITSTATUS(wstatus));
+    syslog(LOG_DEBUG, "Return value %d",(WIFEXITED(wstatus) && WEXITSTATUS(wstatus) == EXIT_SUCCESS));
+    closelog();
     va_end(args);
-
-    return true;
+    return (WIFEXITED(wstatus) && WEXITSTATUS(wstatus) == EXIT_SUCCESS); 
 }
