@@ -6,7 +6,10 @@
 #include <syslog.h>
 
 
-
+/*
+ * @Description Logs the command arguments to be executed for debugging purposes
+ *
+ * */
 void log_commands(int count, char* cmds[]){
 	for(int i=0; i<count; i++){
 		syslog(LOG_DEBUG, "Command %d is %s", i, cmds[i]);
@@ -23,13 +26,6 @@ void log_commands(int count, char* cmds[]){
 */
 bool do_system(const char *cmd)
 {
-
-/*
- * TODO  add your code here
- *  Call the system() function with the command set in the cmd
- *   and return a boolean true if the system() call completed with success
- *   or false() if it returned a failure
-*/
     return system(cmd) == 0;
 }
 
@@ -58,45 +54,37 @@ bool do_exec(int count, ...)
         command[i] = va_arg(args, char *);
     }
     command[count] = NULL;
-    // this line is to avoid a compile warning before your implementation is complete
-    // and may be removed
-    command[count] = command[count];
 
-/*
- * TODO:
- *   Execute a system command by calling fork, execv(),
- *   and wait instead of system (see LSP page 161).
- *   Use the command[0] as the full path to the command to execute
- *   (first argument to execv), and use the remaining arguments
- *   as second argument to the execv() command.
- *
-*/
-    
+    /* Prepare syslog */
     openlog("SystemCalls", LOG_PID, LOG_USER);
     syslog(LOG_DEBUG, "Starting system log");
+
     pid_t pid;
     switch(pid=fork()){
 	 case -1:
 		 syslog(LOG_INFO,"Child process couldn't be created!"); 
 		 exit(1);
 	 case 0: {
+             /* Child Code */
 	     syslog(LOG_INFO,"Child process is created! Executing the command in path %s", command[0]);
              log_commands(count, command);
+	     /* Execute the command in the child process */
 	     if(execv(command[0], command) == -1) {
 	       syslog(LOG_INFO, "Couldn't execute the command with path: %s", command[0]);
 	       exit(1);
 	     }
 	}
     }
+     
+    /* Parent Code */
     int wstatus=0;
-
-
     if(wait(&wstatus) == -1) return 0;;
     
     syslog(LOG_DEBUG, "WIFEXITED: %d, and WEXITSTATUS: %d",WIFEXITED(wstatus), WEXITSTATUS(wstatus));
     syslog(LOG_DEBUG, "Return value %d",(WIFEXITED(wstatus) && WEXITSTATUS(wstatus) == EXIT_SUCCESS));
     closelog();
     va_end(args);
+
     return (WIFEXITED(wstatus) && WEXITSTATUS(wstatus) == EXIT_SUCCESS);
 }
 
@@ -116,45 +104,38 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
         command[i] = va_arg(args, char *);
     }
     command[count] = NULL;
-    // this line is to avoid a compile warning before your implementation is complete
-    // and may be removed
-    command[count] = command[count];
-
-
-/*
- * TODO
- *   Call execv, but first using https://stackoverflow.com/a/13784315/1446624 as a refernce,
- *   redirect standard out to a file specified by outputfile.
- *   The rest of the behaviour is same as do_exec()
- *
-*/
+    /* Open the file to redirect to */
     int fd = open(outputfile, O_WRONLY|O_TRUNC|O_CREAT, 0644);
-     openlog("SystemCalls", LOG_PID, LOG_USER);
+    
+    openlog("SystemCalls", LOG_PID, LOG_USER);
     syslog(LOG_DEBUG, "Starting system log");
+    
     pid_t pid;
     switch(pid=fork()){
 	 case -1:
 		 syslog(LOG_INFO,"Child process couldn't be created!"); 
 		 exit(1);
 	 case 0: {
+	     /* Child process code */
 	     syslog(LOG_INFO,"Child process is created! Executing the command in path %s", command[0]);
              log_commands(count, command);
-
+             /* Redirect the output to the passed file */
 	     dup2(fd,1);
+             /* Execute the command in the child process */
 	     if(execv(command[0], command) == -1) {
 	       syslog(LOG_INFO, "Couldn't execute the command with path: %s", command[0]);
 	       exit(1);
 	     }
 	}
     }
+
     int wstatus=0;
-
-
     if(wait(&wstatus) == -1) return 0;;
     
     syslog(LOG_DEBUG, "WIFEXITED: %d, and WEXITSTATUS: %d",WIFEXITED(wstatus), WEXITSTATUS(wstatus));
     syslog(LOG_DEBUG, "Return value %d",(WIFEXITED(wstatus) && WEXITSTATUS(wstatus) == EXIT_SUCCESS));
     closelog();
     va_end(args);
+    
     return (WIFEXITED(wstatus) && WEXITSTATUS(wstatus) == EXIT_SUCCESS); 
 }
