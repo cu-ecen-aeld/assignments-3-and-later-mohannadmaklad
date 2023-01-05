@@ -1,3 +1,5 @@
+#!/bin/sh
+
 if [ ! -d $1 ] 
 then
 	echo "$1 is not a valid directory!"

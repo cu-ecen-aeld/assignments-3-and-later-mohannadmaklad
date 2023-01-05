@@ -6,7 +6,8 @@ set -e
 set -u
 
 OUTDIR=/tmp/aeld
-KERNEL_REPO=git://git.kernel.org/pub/scm/linux/kernel/git/stable/linux-stable.git
+CURRDIR=$(pwd)
+KERNEL_REPO=https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git
 KERNEL_VERSION=v5.1.10
 BUSYBOX_VERSION=1_33_1
 FINDER_APP_DIR=$(realpath $(dirname $0))
@@ -24,57 +25,84 @@ fi
 mkdir -p ${OUTDIR}
 
 cd "$OUTDIR"
-if [ ! -d "${OUTDIR}/linux-stable" ]; then
+if [ ! -d "${OUTDIR}/linux" ]; then
     #Clone only if the repository does not exist.
-	echo "CLONING GIT LINUX STABLE VERSION ${KERNEL_VERSION} IN ${OUTDIR}"
-	git clone ${KERNEL_REPO} --depth 1 --single-branch --branch ${KERNEL_VERSION}
+    echo "CLONING GIT LINUX STABLE VERSION ${KERNEL_VERSION} IN ${OUTDIR}"
+    git clone ${KERNEL_REPO} --depth 1 --single-branch --branch ${KERNEL_VERSION}
 fi
-if [ ! -e ${OUTDIR}/linux-stable/arch/${ARCH}/boot/Image ]; then
-    cd linux-stable
+
+if [ ! -e ${OUTDIR}/linux/arch/${ARCH}/boot/Image ]; then
+    cd "${OUTDIR}/linux"
     echo "Checking out version ${KERNEL_VERSION}"
     git checkout ${KERNEL_VERSION}
-
-    # TODO: Add your kernel build steps here
+    sudo make ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} mrproper
+    make ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} defconfig
+    make -j4 ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} all
+    #make ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} modules_install
+    #make ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} install
 fi
 
 echo "Adding the Image in outdir"
+cp ${OUTDIR}/linux/arch/${ARCH}/boot/Image ${OUTDIR}
 
 echo "Creating the staging directory for the root filesystem"
 cd "$OUTDIR"
 if [ -d "${OUTDIR}/rootfs" ]
 then
-	echo "Deleting rootfs directory at ${OUTDIR}/rootfs and starting over"
+    echo "Deleting rootfs directory at ${OUTDIR}/rootfs and starting over"
     sudo rm  -rf ${OUTDIR}/rootfs
 fi
 
 # TODO: Create necessary base directories
+mkdir rootfs
+mkdir rootfs/bin rootfs/dev rootfs/etc rootfs/lib rootfs/proc rootfs/sbin rootfs/home rootfs/tmp rootfs/usr rootfs/var
+mkdir rootfs/usr/bin rootfs/usr/lib rootfs/usr/sbin
+mkdir rootfs/var/lib rootfs/var/lock rootfs/var/log rootfs/var/run rootfs/var/tmp
 
 cd "$OUTDIR"
 if [ ! -d "${OUTDIR}/busybox" ]
 then
-git clone git://busybox.net/busybox.git
+    git clone git://busybox.net/busybox.git
     cd busybox
     git checkout ${BUSYBOX_VERSION}
-    # TODO:  Configure busybox
-else
-    cd busybox
-fi
+    cd ..
+fi    
 
-# TODO: Make and install busybox
+cd busybox
+make ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} distclean 
+make ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} defconfig
+make -j4 ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} install CONFIG_PREFIX="${OUTDIR}/rootfs"
+ 
+ 
+echo "Busybox dependencies..."
+${CROSS_COMPILE}readelf -a ${OUTDIR}/rootfs/bin/busybox | grep "program interpreter"
+${CROSS_COMPILE}readelf -a ${OUTDIR}/rootfs/bin/busybox | grep "Shared library"
 
-echo "Library dependencies"
-${CROSS_COMPILE}readelf -a bin/busybox | grep "program interpreter"
-${CROSS_COMPILE}readelf -a bin/busybox | grep "Shared library"
+echo "Copying sysroot dependencies..."
+SYSROOT=$(${CROSS_COMPILE}gcc -print-sysroot)
+cp -a "${SYSROOT}"/lib/* ${OUTDIR}/rootfs/lib/
+cp -a "${SYSROOT}"/lib64 ${OUTDIR}/rootfs/.
 
-# TODO: Add library dependencies to rootfs
+echo "Creating device nodes..."
+sudo mknod -m 666 ${OUTDIR}/rootfs/dev/null c 1 3
+sudo mknod -m 666 ${OUTDIR}/rootfs/dev/console c 5 1
 
-# TODO: Make device nodes
+cd "${CURRDIR}"
+make CROSS_COMPILE=${CROSS_COMPILE}
 
-# TODO: Clean and build the writer utility
+mkdir -p ${OUTDIR}/rootfs/home/conf
+cp ./writer ${OUTDIR}/rootfs/home/
+cp ./autorun-qemu.sh ${OUTDIR}/rootfs/home/
+cp ./finder.sh ${OUTDIR}/rootfs/home/
+cp ./finder-test.sh ${OUTDIR}/rootfs/home/
+cp -r ./conf/* ${OUTDIR}/rootfs/home/conf
 
-# TODO: Copy the finder related scripts and executables to the /home directory
-# on the target rootfs
+echo "Chowning the root file system..."
+sudo chown -R root:root ${OUTDIR}/rootfs
 
-# TODO: Chown the root directory
+echo "Creating initramfs.cpio.gz.."
+cd ${OUTDIR}/rootfs
+find . | cpio -H newc -ov --owner root:root > ../initramfs.cpio
+cd ..
+gzip -f initramfs.cpio
 
-# TODO: Create initramfs.cpio.gz
