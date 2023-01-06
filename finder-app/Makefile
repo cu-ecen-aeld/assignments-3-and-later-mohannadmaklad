@@ -1,5 +1,5 @@
 all:
-	$(CROSS_COMPILE)gcc writer.c -o writer
+	$(CC) $(CFLAGS) $(INCLUDES) writer.c -o writer $(LDFLAGS)
 	chmod u+x writer
 clean:
 	$(RM) writer
