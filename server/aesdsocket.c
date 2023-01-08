@@ -67,7 +67,7 @@ int main(int argc, char** argv) {
 	
 	/* socket options: enable address reuse */
 	int reuse_flag = 1;
-	int sockopt_ret = setsockopt(sockfd, SOL_SOCKET, SO_REUSEPORT, &reuse_flag, sizeof(int));
+	int sockopt_ret = setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &reuse_flag, sizeof(int));
 	if(sockopt_ret == -1){
 		syslog(LOG_DEBUG, "Failed to set socket options");
 		exit(EXIT_FAILURE);
