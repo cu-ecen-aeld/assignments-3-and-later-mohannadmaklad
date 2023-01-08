@@ -9,6 +9,7 @@
 #include <netdb.h>
 #include <arpa/inet.h>
 #include <stdio.h>
+#include <errno.h>
 
 #ifndef CONNECTION_PORT 		/* allow CONNECTION_PORT to be defined by the user*/
 	#define CONNECTION_PORT "9000" 	
@@ -66,7 +67,7 @@ int main(int argc, char** argv) {
 	
 	/* socket options: enable address reuse */
 	int reuse_flag = 1;
-	int sockopt_ret = setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &reuse_flag, sizeof(int));
+	int sockopt_ret = setsockopt(sockfd, SOL_SOCKET, SO_REUSEPORT, &reuse_flag, sizeof(int));
 	if(sockopt_ret == -1){
 		syslog(LOG_DEBUG, "Failed to set socket options");
 		exit(EXIT_FAILURE);
@@ -74,8 +75,10 @@ int main(int argc, char** argv) {
 
 	int bind_ret = bind(sockfd, res->ai_addr, res->ai_addrlen);
 	if(bind_ret == -1) {
+		int saved_errno = errno;
 		close(sockfd);
 		syslog(LOG_DEBUG, "Failed to bind socket to port %s", CONNECTION_PORT);
+		syslog(LOG_DEBUG, "errno %d", saved_errno);
 		exit(EXIT_FAILURE);
 	}
 	
@@ -134,6 +137,7 @@ int main(int argc, char** argv) {
 		
 		fclose(file);
 		close(accept_fd);
+		//close(sockfd);
 		syslog(LOG_DEBUG, "Closed connection from %s\n", peer_name);
 	}
 	
