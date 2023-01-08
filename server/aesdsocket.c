@@ -59,6 +59,13 @@ int main(int argc, char** argv) {
 	struct addrinfo hints, *res;
 	bzero(&hints, sizeof(hints));
 	hints.ai_flags = AI_PASSIVE;
+	 hints.ai_family = AF_UNSPEC;    /* Allow IPv4 or IPv6 */
+           hints.ai_socktype = SOCK_DGRAM; /* Datagram socket */
+           hints.ai_flags = AI_PASSIVE;    /* For wildcard IP address */
+           hints.ai_protocol = 0;          /* Any protocol */
+           hints.ai_canonname = NULL;
+           hints.ai_addr = NULL;
+           hints.ai_next = NULL;
 
 	if( getaddrinfo(NULL, CONNECTION_PORT, &hints, &res) == -1){
 		syslog(LOG_DEBUG, "getaddrinfo failed");
